@@ -6,13 +6,33 @@
 
 
 from utils import *
+import torch.nn as nn
+import torch
 
-class Summarizer():
+
+
+class Summarizer(nn.Module):
     
-    def __init__(self):
-        pass
+    def __init__(self, input_dim, output_dim, num_heads, num_layers, emb_dim=256):
+        super(Summarizer, self).__init__()
+        self.embedding = nn.Embedding(input_dim, emb_dim)   
+        self.transformer = nn.Transformer(d_model=emb_dim, nhead=num_heads, num_encoder_layers=num_layers)
+        self.fc = nn.Linear(emb_dim, output_dim)
 
-    def summarize(self, article) -> str:
+    
+    def forward(self, content, date):
+        
+        content_embedding = self.embedding(content)
+        date_embedding = self.embedding(date)
+        
+        input_vector = torch.cat((content_embedding, date_embedding), dim=1)
+
+        output = self.transformer(input_vector)
+        output = self.fc(output)
+
+        return output
+
+    def summarize(self, content) -> str:
         '''
             This function takes in text and returns the summary
             arg: 
@@ -20,7 +40,12 @@ class Summarizer():
             return:
                 summary: the summary of the text
         '''
-        return self.__summarize_baseline(article)
+        summary = self(content)
+        
+        
+        return self.__summarize_baseline(content)
+    
+    
 
     def __summarize_baseline(self, emailList:list[Email]) -> str:
         '''

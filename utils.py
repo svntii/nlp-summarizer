@@ -35,7 +35,16 @@ class Email():
         self.source = source
         self.to = to
         self.thread = thread
+        self.message = self.__clean_thread(thread)
     
+    def __clean_thread(self, thread):
+        '''
+            This function cleans the thread and returns a list of sentences
+        '''
+        message_list = []
+        temp = thread.split("Subject:")
+        
+        return temp
 
 class EmailSummaries():
     kThreadID = 'thread_id'
@@ -44,22 +53,6 @@ class EmailSummaries():
     def __init__(self, id, summary):
         self.id = id
         self.summary = summary
-
-
-
-class Evaluator():
-    '''
-        This class contains the methods to evaluate the summarizer
-    '''
-    def __init__(self):
-        pass
-
-    def evaluate(self, data):
-        '''
-            This function evaluates the summarizer
-        '''
-        pass
-
 
 
 class Utils():
@@ -71,6 +64,10 @@ class Utils():
             
             ARGS:
                 filename: the name of the json file
+            RETURN:
+                data: the data read from the file 
+                    - as a dictionary (id, [Emails])
+                    - as a list [objects]
         '''
         
         if asObject:

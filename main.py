@@ -6,7 +6,7 @@ EMAIL_SUMMARIES = "data/email_thread_summaries.json"
 
 
 from utils import *
-from summarizer import *
+from models import *
 
 
 def test_baseline(emailList, s):
@@ -23,7 +23,10 @@ def main():
 
     s = Summarizer()
 
-    test_baseline(details, s)
+    # [print(x.thread) for x in details[1]]
+    print(details[1][0].message)
+
+    # test_baseline(details, s)
 
 
 
