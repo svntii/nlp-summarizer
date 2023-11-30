@@ -54,6 +54,9 @@ class EmailSummaries():
     def __init__(self, id, summary):
         self.id = id
         self.summary = summary
+    
+    def __size__(self):
+        return len(self.summary)
 
 
 class Utils():
@@ -83,9 +86,10 @@ class Utils():
                 if asObject:
                     if objectType == objects.EMAIL_DETAILS:
                         a = Email(item[Email.kThreadID], item[Email.kSubject], item[Email.kTimestamp], item[Email.kFrom], item[Email.kTo], item[Email.kBody])
+                        data[a.id] = data.get(a.id, []) + [a]
                     elif objectType == objects.EMAIL_SUMMARIES:
                         a = EmailSummaries(item[EmailSummaries.kThreadID], item[EmailSummaries.kSummary])
-                    data[a.id] = data.get(a.id, []) + [a]
+                        data[a.id] = a
                 else:
                     a = item
                     data.append(a)   
@@ -100,13 +104,13 @@ class Utils():
                 vocab: the vocabulary
         '''
         vocab = Vocab()
-        for email_list, summary_list in data:
+        for email_list, summary in data:
             for email in email_list:
                 for word in email.thread.split():
                     vocab.add(word)
-            for summary in summary_list:
-                for word in summary.summary.split():
-                    vocab.add(word)
+            
+            for word in summary.summary.split():
+                vocab.add(word)
         
         return vocab
 
