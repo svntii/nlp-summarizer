@@ -8,53 +8,115 @@ import datetime
 from utils import *
 import torch.nn as nn
 import torch
+import math
 
-DEVICE = torch.device("mps" if torch.backends.mps.is_available() else "cpu")
 
 class Summarizer(nn.Module):
-    
-    def __init__(self, input_dim:int, output_dim:int, num_heads:int, num_layers:int, vocab:Vocab, emb_dim=256):
+    '''
+        This class is the summarizer
+    '''
+
+    def __init__(self, ntoken, ninp, nhead, nhid, nlayers, vocab:Vocab, dropout=0.5,):
+        '''
+            This function initializes the summarizer
+            arg:
+                ntoken: the number of tokens
+                ninp: the number of input
+                nhead: the number of heads
+                nhid: the number of hidden layers
+                nlayers: the number of layers
+                vocab: the vocab
+                dropout: the dropout rate
+        '''
+        
         super(Summarizer, self).__init__()
         
-        self.embedding = nn.Embedding(input_dim, emb_dim)   
-        self.transformer = nn.Transformer(d_model=emb_dim, nhead=num_heads, num_encoder_layers=num_layers)
-        self.fc = nn.Linear(emb_dim, output_dim)
+        self.model_type = 'Transformer'
+        self.src_mask = None
         self.vocab = vocab
 
+        self.pos = PositionalEncoding(ninp, dropout)
+        self.encoder_layer = nn.TransformerEncoderLayer(d_model=ninp, nhead=nhead, dim_feedforward=nhid, dropout=dropout)
+        self.transformer_encoder = nn.TransformerEncoder(self.encoder_layer, num_layers=nlayers)
+        
+        self.encoder = nn.Embedding(ntoken, ninp)
+        self.decoder = nn.Linear(ninp, ntoken)
+
+        self.ninp = ninp
+        self.n_token = ntoken
+        self.init_weights()
+
+    def _generate_square_subsequent_mask(self, sz):
+        mask = (torch.triu(torch.ones(sz, sz)) == 1).transpose(0, 1)
+        mask = mask.float().masked_fill(mask == 0, float('-inf')).masked_fill(mask == 1, float(0.0))
+        return mask
     
-    def forward(self, content, date, summary):
+
+    def init_weights(self):
         '''
-            This function takes in text and returns the summary
-            arg: 
-                data: the text to be summarized
+            This function initializes the weights
+        '''
+
+        initrange = 0.1
+        self.encoder.weight.data.uniform_(-initrange, initrange)
+        self.decoder.bias.data.zero_()
+        self.decoder.weight.data.uniform_(-initrange, initrange)
+    
+    def forward(self, src):
+        '''
+            This function is the forward function
+            arg:
+                src: the source
             return:
-                summary: the summary of the text
+                output: the output
         '''
+        if self.src_mask is None or self.src_mask.size(0) != len(src):
+            device = src.device
+            mask = self._generate_square_subsequent_mask(len(src)).to(device)
+            self.src_mask = mask
 
-        content_embedding = self.embedding(content)
-        target_embedding = self.embedding(summary)        
-        date_embedding = self.embedding(date)
-
-        # input_vector = torch.cat((content_embedding, date_embedding), dim=1)
-
-        output = self.transformer(content_embedding, target_embedding)
-        output = self.fc(output)
-
+        src = self.encoder(src) * math.sqrt(self.ninp)
+        src = self.pos(src)
+        output = self.transformer_encoder(src, self.src_mask)
+        output = self.decoder(output)
         return output
 
-    def summarize(self, content, date, summary) -> str:
+    def summarize(self, content, date, decoding_strategy="greedy", max_length=1000):
         '''
-            This function takes in text and returns the summary
-            arg: 
-                data: the text to be summarized
+            This function takes in the content and date and returns the summary
+            arg:
+                content: the content
+                date: the date
             return:
-                summary: the summary of the text
+                summary: the summary
         '''
-        o = self(content, date, summary)
-        return o
+
+        # TODO fix this
+        content_str = "".join([str(o.thread) for o in content])
+        content_list = content_str.split()
+
+        # trim content list
+        if len(content_list) > max_length:
+            content_list = content_list[:max_length]
+
+
+        content_tensor = torch.tensor([self.vocab.numberize(word) for word in content_list], dtype=torch.long)            
+        date_tensor = torch.tensor(content[-1].timestamp, dtype=torch.long)
+
+        # concatenate the date and content
+        # content_tensor = torch.cat((date_tensor, content_tensor), 0)
+
+        output = self.forward(content_tensor)
         
-        # return self.__summarize_baseline(content)
-    
+        # tokens = []
+        # if decoding_strategy == "greedy":
+        #     for val in output:            
+        #         item = torch.argmax(val)
+        #         tokens.append(self.vocab.denumberize(item))
+
+
+        
+        return output
     
 
     def __summarize_baseline(self, emailList:list[Email]) -> str:
@@ -72,7 +134,20 @@ class Summarizer(nn.Module):
 
 
         return message
-    
 
-    def __train(self, data):
-        pass
+class PositionalEncoding(nn.Module):
+    def __init__(self, d_model, dropout=0.1, max_len=5000):
+        super(PositionalEncoding, self).__init__()
+        self.dropout = nn.Dropout(p=dropout)
+
+        pe = torch.zeros(max_len, d_model)
+        position = torch.arange(0, max_len, dtype=torch.float).unsqueeze(1)
+        div_term = torch.exp(torch.arange(0, d_model, 2).float() * (-math.log(10000.0) / d_model))
+        pe[:, 0::2] = torch.sin(position * div_term)
+        pe[:, 1::2] = torch.cos(position * div_term)
+        pe = pe.unsqueeze(0).transpose(0, 1)
+        self.register_buffer('pe', pe)
+
+    def forward(self, x):
+        x = x + self.pe[:x.size(0), :]
+        return self.dropout(x)
